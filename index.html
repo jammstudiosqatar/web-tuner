@@ -7,11 +7,58 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <div id="tuner">
-    <h1>Loading…</h1>
+  <div id="tuner" class="tuner-container">
+    <!-- HEADER WITH SETTINGS COG -->
+    <div class="tuner-header">
+      <button id="settingsButton" class="settings-btn" aria-label="Settings">
+        ⚙️
+      </button>
+    </div>
+
+    <!-- TOP METER (we'll style this arc later) -->
+    <div class="meter-container">
+      <canvas id="meterGauge" width="300" height="100"></canvas>
+    </div>
+
+    <!-- CENTRAL NOTE DISPLAY -->
+    <div class="note-display">
+      <span id="noteChar" class="note-char">--</span>
+      <span id="noteStatus" class="note-status">IN TUNE</span>
+    </div>
+
+    <!-- WAVEFORM -->
+    <div class="waveform-container">
+      <canvas id="waveform" width="300" height="100"></canvas>
+    </div>
+
+    <!-- STRING PRESETS DISPLAY -->
+    <div class="string-buttons" id="stringButtons">
+      <!-- We'll fill these in via tuner.js -->
+    </div>
+
+    <!-- BOTTOM NEEDLE (for deviation) -->
+    <div class="needle-container">
+      <canvas id="needle" width="300" height="100"></canvas>
+    </div>
   </div>
 
-  <!-- Presets must load before the tuner logic -->
+  <!-- SETTINGS OVERLAY -->
+  <div id="settingsOverlay" class="overlay">
+    <div class="overlay-content">
+      <button id="closeSettings" class="close-btn" aria-label="Close">&times;</button>
+      <h2>Settings</h2>
+      <div class="setting-item">
+        <label for="refFreqInput">A₄ tuning (Hz)</label>
+        <input type="number" id="refFreqInput" step="0.1" />
+      </div>
+      <div class="setting-item">
+        <label for="presetSelect">Tuning Preset</label>
+        <select id="presetSelect"></select>
+      </div>
+    </div>
+  </div>
+
+  <!-- Presets & Tuner Logic -->
   <script src="presets.js"></script>
   <script src="tuner.js"></script>
 </body>
