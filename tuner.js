@@ -101,7 +101,7 @@
         needleCtx.clearRect(0, 0, needleCanvas.width, needleCanvas.height);
         needleCtx.save();
         needleCtx.translate(needleCanvas.width / 2, needleCanvas.height);
-        needleCtx.rotate(-Math.PI/2 + angle);
+        needleCtx.rotate(angle);
         needleCtx.lineWidth = 4;
         needleCtx.beginPath();
         needleCtx.moveTo(0, 0);
