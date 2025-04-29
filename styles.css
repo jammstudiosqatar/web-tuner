@@ -1,34 +1,148 @@
-/* Basic reset and centering */
+/* ========== BASE ========== */
 body {
   margin: 0;
+  background: #111;
+  color: #ddd;
   font-family: Arial, sans-serif;
-  background: #fafafa;
-  color: #333;
   display: flex;
   justify-content: center;
-  align-items: flex-start;
   padding: 20px;
 }
 
-/* Container sizing */
-#tuner {
-  max-width: 360px;
+/* ========== TUNER LAYOUT ========== */
+.tuner-container {
   width: 100%;
-  text-align: center;
+  max-width: 360px;
+  position: relative;
 }
 
-/* Make canvases responsive */
+.tuner-header {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.settings-btn {
+  background: none;
+  border: none;
+  color: #ddd;
+  font-size: 1.4em;
+  cursor: pointer;
+}
+
+/* METER */
+.meter-container {
+  position: relative;
+  width: 100%;
+  height: 100px;
+  margin-bottom: 16px;
+  /* background for your gauge arc */
+  /* background: radial-gradient(...); */
+}
+
+/* CENTRAL NOTE */
+.note-display {
+  text-align: center;
+  margin-bottom: 16px;
+}
+.note-char {
+  display: block;
+  font-size: 3em;
+  color: #fe2;
+}
+.note-status {
+  display: block;
+  font-size: 1em;
+  color: #aaa;
+}
+
+/* WAVEFORM */
+.waveform-container canvas {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+/* STRING BUTTONS (placeholders) */
+.string-buttons {
+  display: flex;
+  justify-content: space-between;
+  margin: 16px 0;
+}
+.string-buttons button {
+  flex: 1;
+  margin: 0 4px;
+  padding: 8px 0;
+  background: #222;
+  border: 1px solid #444;
+  border-radius: 4px;
+  color: #ddd;
+  cursor: pointer;
+}
+.string-buttons button.active {
+  border-color: #fe2;
+  color: #fe2;
+}
+
+/* NEEDLE */
+.needle-container {
+  width: 100%;
+  height: 100px;
+  position: relative;
+}
+
+/* Make all canvases responsive */
 canvas {
   width: 100%;
   height: auto;
   display: block;
-  margin: 8px 0;
 }
 
-/* Style the A₄ input and preset select */
-input[type="number"],
-select {
+/* ========== SETTINGS OVERLAY ========== */
+.overlay {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: rgba(0,0,0,0.85);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+.overlay.open {
+  display: flex;
+}
+.overlay-content {
+  background: #222;
+  padding: 20px;
+  border-radius: 8px;
+  width: 280px;
+  color: #ddd;
+  position: relative;
+}
+.close-btn {
+  position: absolute;
+  top: 8px; right: 12px;
+  background: none;
+  border: none;
+  font-size: 1.6em;
+  color: #ddd;
+  cursor: pointer;
+}
+.setting-item {
+  margin: 12px 0;
+}
+.setting-item label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 0.9em;
+}
+.setting-item input,
+.setting-item select {
+  width: 100%;
+  padding: 6px;
   font-size: 1em;
-  padding: 2px 4px;
-  margin-left: 4px;
+  background: #333;
+  border: 1px solid #444;
+  border-radius: 4px;
+  color: #ddd;
 }
