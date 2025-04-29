@@ -34,6 +34,7 @@
       if (c[i] > maxval) { maxval = c[i]; maxpos = i; }
     }
     let T0 = maxpos;
+    // Parabolic interpolation
     const x1 = c[T0 - 1], x2 = c[T0], x3 = c[T0 + 1];
     const a = (x1 + x3 - 2 * x2) / 2;
     const b = (x3 - x1) / 2;
@@ -50,11 +51,17 @@
   // —— tuning reference (A₄) ——
   let referenceFrequency = 440;
 
-  // —— display smoothing state ——
-  let lastDisplayTime = 0;
-  let displayFreq = '--';
-  let displayCentsValue = '±0';
-  const displayInterval = 0.25; // seconds
+  // —— current tuning preset strings ——
+  let currentStrings = window.tuningPresets["6-String Standard"] || [];
+
+  // Convert note name (e.g. "E2") → frequency in Hz
+  function noteToFreq(noteName) {
+    const noteStrings = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+    const pitchClass = noteName.slice(0, -1);
+    const octave     = parseInt(noteName.slice(-1), 10);
+    const semitone   = noteStrings.indexOf(pitchClass) + octave * 12;
+    return referenceFrequency * Math.pow(2, (semitone - 69) / 12);
+  }
 
   try {
     // 1️⃣ Get microphone audio
@@ -72,38 +79,57 @@
         <input type="number" id="refFreqInput"
                value="${referenceFrequency}"
                step="0.1" /> Hz
+        <label for="presetSelect" style="margin-left:8px;">Tuning:</label>
+        <select id="presetSelect">
+          ${Object.keys(window.tuningPresets)
+            .map(p => `<option>${p}</option>`)
+            .join('')}
+        </select>
       </div>
       <canvas id="waveform" width="300" height="100"></canvas>
       <div id="note" style="font-size:1.5em; margin:8px;">--</div>
       <div id="cents" style="font-size:1.2em; color:#666; margin-bottom:8px;">
         ±0 cents
       </div>
+      <div id="string" style="font-size:1.2em; color:#666; margin-bottom:8px;">
+        String: --
+      </div>
       <canvas id="needle" width="300" height="100"></canvas>
     `;
+
+    // Wire up controls
     const refFreqInput = document.getElementById('refFreqInput');
     refFreqInput.addEventListener('input', () => {
       referenceFrequency = parseFloat(refFreqInput.value) || 440;
     });
 
+    const presetSelect = document.getElementById('presetSelect');
+    // initialize currentStrings from the default select value
+    currentStrings = window.tuningPresets[presetSelect.value];
+    presetSelect.addEventListener('change', () => {
+      currentStrings = window.tuningPresets[presetSelect.value];
+    });
+
+    // Prepare drawing contexts & buffers
     const waveCanvas   = document.getElementById('waveform');
     const waveCtx      = waveCanvas.getContext('2d');
     const needleCanvas = document.getElementById('needle');
     const needleCtx    = needleCanvas.getContext('2d');
     const noteElem     = document.getElementById('note');
     const centsElem    = document.getElementById('cents');
+    const stringElem   = document.getElementById('string');
     const bufferLen    = analyser.fftSize;
     const dataArray    = new Float32Array(bufferLen);
-    const noteStrings  = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 
     // 3️⃣ Animation & analysis loop
     function draw() {
       requestAnimationFrame(draw);
       analyser.getFloatTimeDomainData(dataArray);
 
-      // — waveform display
-      waveCtx.fillStyle = '#f5f5f5';
+      // — draw waveform
+      waveCtx.fillStyle   = '#f5f5f5';
       waveCtx.fillRect(0, 0, waveCanvas.width, waveCanvas.height);
-      waveCtx.lineWidth = 2;
+      waveCtx.lineWidth   = 2;
       waveCtx.strokeStyle = '#333';
       waveCtx.beginPath();
       const sliceW = waveCanvas.width / bufferLen;
@@ -117,40 +143,53 @@
       waveCtx.lineTo(waveCanvas.width, waveCanvas.height / 2);
       waveCtx.stroke();
 
-      // — pitch detection + smoothing
+      // — pitch detection
       const pitch = autoCorrelate(dataArray, audioContext.sampleRate);
       if (pitch !== -1) {
-        // MIDI note mapping
+        // map to fractional MIDI note
         const noteNum = 12 * (Math.log(pitch / referenceFrequency) / Math.log(2)) + 69;
         const rounded = Math.round(noteNum);
 
-        // transient-aware smoothing
+        // —— transient-aware smoothing —— 
+        // 1️⃣ RMS energy
         let rms = 0;
         for (let i = 0; i < bufferLen; i++) rms += dataArray[i] * dataArray[i];
         rms = Math.sqrt(rms / bufferLen);
-        if (rms > prevRms * 1.3) lastPluckTime = audioContext.currentTime;
+
+        // 2️⃣ Onset detection
+        const onsetThreshold = 1.3;
+        if (rms > prevRms * onsetThreshold) {
+          lastPluckTime = audioContext.currentTime;
+        }
         prevRms = rms;
+
+        // 3️⃣ Adaptive smoothing α
         const delta = audioContext.currentTime - lastPluckTime;
-        const alpha =
-          delta < 0.05 ? 0.02 : delta < 0.2 ? 0.1 : 0.2;
+        let alpha = delta < 0.05
+                    ? 0.02
+                    : delta < 0.2
+                      ? 0.1
+                      : 0.2;
+
+        // 4️⃣ Smooth detune & compute angle
         const detuneRaw = noteNum - rounded;
         smoothedDetune = alpha * detuneRaw + (1 - alpha) * smoothedDetune;
         const angle = smoothedDetune * (Math.PI / 4);
 
-        // display smoothing: update at most every 250ms
-        const now = audioContext.currentTime;
-        if (now - lastDisplayTime >= displayInterval) {
-          displayFreq = Math.round(pitch);
-          displayCentsValue =
-            (smoothedDetune * 100 >= 0 ? '+' : '') +
-            Math.round(smoothedDetune * 100);
-          lastDisplayTime = now;
-        }
-
-        // — update text displays
+        // — display note
         const octave = Math.floor(rounded / 12);
-        noteElem.textContent = `${noteStrings[rounded % 12]}${octave} (${displayFreq} Hz)`;
-        centsElem.textContent = displayCentsValue + ' cents';
+        noteElem.textContent = `${['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'][rounded % 12]}${octave} (${Math.round(pitch)} Hz)`;
+
+        // — display cents
+        const centsRounded = Math.round(smoothedDetune * 100);
+        centsElem.textContent =
+          (centsRounded >= 0 ? '+' : '') + centsRounded + ' cents';
+
+        // — determine closest string in current preset
+        const freqs = currentStrings.map(noteToFreq);
+        const diffs = freqs.map(f => Math.abs(pitch - f));
+        const idx   = diffs.indexOf(Math.min(...diffs));
+        stringElem.textContent = `String: ${currentStrings[idx]}`;
 
         // — draw needle
         needleCtx.clearRect(0, 0, needleCanvas.width, needleCanvas.height);
@@ -163,9 +202,12 @@
         needleCtx.lineTo(0, -80);
         needleCtx.stroke();
         needleCtx.restore();
+
       } else {
-        noteElem.textContent = '--';
-        centsElem.textContent = '±0 cents';
+        // no pitch
+        noteElem.textContent   = '--';
+        centsElem.textContent  = '±0 cents';
+        stringElem.textContent = 'String: --';
         needleCtx.clearRect(0, 0, needleCanvas.width, needleCanvas.height);
       }
     }
