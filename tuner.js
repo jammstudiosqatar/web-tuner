@@ -34,7 +34,6 @@
       if (c[i] > maxval) { maxval = c[i]; maxpos = i; }
     }
     let T0 = maxpos;
-    // Parabolic interpolation
     const x1 = c[T0 - 1], x2 = c[T0], x3 = c[T0 + 1];
     const a = (x1 + x3 - 2 * x2) / 2;
     const b = (x3 - x1) / 2;
@@ -50,6 +49,12 @@
 
   // —— tuning reference (A₄) ——
   let referenceFrequency = 440;
+
+  // —— display smoothing state ——
+  let lastDisplayTime = 0;
+  let displayFreq = '--';
+  let displayCentsValue = '±0';
+  const displayInterval = 0.25; // seconds
 
   try {
     // 1️⃣ Get microphone audio
@@ -80,7 +85,6 @@
       referenceFrequency = parseFloat(refFreqInput.value) || 440;
     });
 
-    // Get drawing contexts & data buffer
     const waveCanvas   = document.getElementById('waveform');
     const waveCtx      = waveCanvas.getContext('2d');
     const needleCanvas = document.getElementById('needle');
@@ -96,10 +100,10 @@
       requestAnimationFrame(draw);
       analyser.getFloatTimeDomainData(dataArray);
 
-      // — waveform
-      waveCtx.fillStyle   = '#f5f5f5';
+      // — waveform display
+      waveCtx.fillStyle = '#f5f5f5';
       waveCtx.fillRect(0, 0, waveCanvas.width, waveCanvas.height);
-      waveCtx.lineWidth   = 2;
+      waveCtx.lineWidth = 2;
       waveCtx.strokeStyle = '#333';
       waveCtx.beginPath();
       const sliceW = waveCanvas.width / bufferLen;
@@ -107,40 +111,46 @@
       for (let i = 0; i < bufferLen; i++) {
         const v = dataArray[i] * 0.5 + 0.5;
         const y = v * waveCanvas.height;
-        if (i === 0) waveCtx.moveTo(x, y);
-        else         waveCtx.lineTo(x, y);
+        i === 0 ? waveCtx.moveTo(x, y) : waveCtx.lineTo(x, y);
         x += sliceW;
       }
       waveCtx.lineTo(waveCanvas.width, waveCanvas.height / 2);
       waveCtx.stroke();
 
-      // — pitch detection
+      // — pitch detection + smoothing
       const pitch = autoCorrelate(dataArray, audioContext.sampleRate);
       if (pitch !== -1) {
-        // map to fractional MIDI note
+        // MIDI note mapping
         const noteNum = 12 * (Math.log(pitch / referenceFrequency) / Math.log(2)) + 69;
         const rounded = Math.round(noteNum);
 
-        // —— transient-aware smoothing ——
+        // transient-aware smoothing
         let rms = 0;
         for (let i = 0; i < bufferLen; i++) rms += dataArray[i] * dataArray[i];
         rms = Math.sqrt(rms / bufferLen);
         if (rms > prevRms * 1.3) lastPluckTime = audioContext.currentTime;
         prevRms = rms;
         const delta = audioContext.currentTime - lastPluckTime;
-        let alpha = delta < 0.05 ? 0.02 : delta < 0.2 ? 0.1 : 0.2;
+        const alpha =
+          delta < 0.05 ? 0.02 : delta < 0.2 ? 0.1 : 0.2;
         const detuneRaw = noteNum - rounded;
         smoothedDetune = alpha * detuneRaw + (1 - alpha) * smoothedDetune;
         const angle = smoothedDetune * (Math.PI / 4);
 
-        // — display note & rounded Hz
-        const octave = Math.floor(rounded / 12);
-        const freqDisplay = Math.round(pitch);
-        noteElem.textContent = `${noteStrings[rounded % 12]}${octave} (${freqDisplay} Hz)`;
+        // display smoothing: update at most every 250ms
+        const now = audioContext.currentTime;
+        if (now - lastDisplayTime >= displayInterval) {
+          displayFreq = Math.round(pitch);
+          displayCentsValue =
+            (smoothedDetune * 100 >= 0 ? '+' : '') +
+            Math.round(smoothedDetune * 100);
+          lastDisplayTime = now;
+        }
 
-        // — display rounded cents
-        const centsRounded = Math.round(smoothedDetune * 100);
-        centsElem.textContent = (centsRounded >= 0 ? '+' : '') + centsRounded + ' cents';
+        // — update text displays
+        const octave = Math.floor(rounded / 12);
+        noteElem.textContent = `${noteStrings[rounded % 12]}${octave} (${displayFreq} Hz)`;
+        centsElem.textContent = displayCentsValue + ' cents';
 
         // — draw needle
         needleCtx.clearRect(0, 0, needleCanvas.width, needleCanvas.height);
