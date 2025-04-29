@@ -25,10 +25,10 @@ canvas {
   margin: 8px 0;
 }
 
-/* Style the A₄ input */
-input[type="number"] {
+/* Style the A₄ input and preset select */
+input[type="number"],
+select {
   font-size: 1em;
   padding: 2px 4px;
-  width: 60px;
   margin-left: 4px;
 }
