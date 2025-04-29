@@ -96,7 +96,7 @@
       requestAnimationFrame(draw);
       analyser.getFloatTimeDomainData(dataArray);
 
-      // — draw waveform
+      // — waveform
       waveCtx.fillStyle   = '#f5f5f5';
       waveCtx.fillRect(0, 0, waveCanvas.width, waveCanvas.height);
       waveCtx.lineWidth   = 2;
@@ -107,7 +107,8 @@
       for (let i = 0; i < bufferLen; i++) {
         const v = dataArray[i] * 0.5 + 0.5;
         const y = v * waveCanvas.height;
-        i === 0 ? waveCtx.moveTo(x, y) : waveCtx.lineTo(x, y);
+        if (i === 0) waveCtx.moveTo(x, y);
+        else         waveCtx.lineTo(x, y);
         x += sliceW;
       }
       waveCtx.lineTo(waveCanvas.width, waveCanvas.height / 2);
@@ -120,43 +121,26 @@
         const noteNum = 12 * (Math.log(pitch / referenceFrequency) / Math.log(2)) + 69;
         const rounded = Math.round(noteNum);
 
-        // —— transient-aware smoothing —— 
-        // 1️⃣ RMS energy
+        // —— transient-aware smoothing ——
         let rms = 0;
         for (let i = 0; i < bufferLen; i++) rms += dataArray[i] * dataArray[i];
         rms = Math.sqrt(rms / bufferLen);
-
-        // 2️⃣ Onset detection
-        const onsetThreshold = 1.3;
-        if (rms > prevRms * onsetThreshold) {
-          lastPluckTime = audioContext.currentTime;
-        }
+        if (rms > prevRms * 1.3) lastPluckTime = audioContext.currentTime;
         prevRms = rms;
-
-        // 3️⃣ Adaptive smoothing α
         const delta = audioContext.currentTime - lastPluckTime;
-        let alpha = delta < 0.05
-                    ? 0.02
-                    : delta < 0.2
-                      ? 0.1
-                      : 0.2;
-
-        // 4️⃣ Smooth detune
+        let alpha = delta < 0.05 ? 0.02 : delta < 0.2 ? 0.1 : 0.2;
         const detuneRaw = noteNum - rounded;
         smoothedDetune = alpha * detuneRaw + (1 - alpha) * smoothedDetune;
         const angle = smoothedDetune * (Math.PI / 4);
 
-        // — display note
+        // — display note & rounded Hz
         const octave = Math.floor(rounded / 12);
-        noteElem.textContent = `${noteStrings[rounded % 12]}${octave} (${pitch.toFixed(2)} Hz)`;
+        const freqDisplay = Math.round(pitch);
+        noteElem.textContent = `${noteStrings[rounded % 12]}${octave} (${freqDisplay} Hz)`;
 
-        // — display rounded cents (no decimals)
-        const centDeviation = smoothedDetune * 100;
-        const centsRounded = Math.round(centDeviation);
-        centsElem.textContent =
-        (centsRounded >= 0 ? '+' : '') +
-        centsRounded +
-        ' cents';
+        // — display rounded cents
+        const centsRounded = Math.round(smoothedDetune * 100);
+        centsElem.textContent = (centsRounded >= 0 ? '+' : '') + centsRounded + ' cents';
 
         // — draw needle
         needleCtx.clearRect(0, 0, needleCanvas.width, needleCanvas.height);
@@ -169,9 +153,7 @@
         needleCtx.lineTo(0, -80);
         needleCtx.stroke();
         needleCtx.restore();
-
       } else {
-        // no pitch detected
         noteElem.textContent = '--';
         centsElem.textContent = '±0 cents';
         needleCtx.clearRect(0, 0, needleCanvas.width, needleCanvas.height);
