@@ -1,131 +1,57 @@
 // tuner.js
 (async function() {
-  // ── 1. Feature check ───────────────────────────────────
-  const tunerDiv = document.getElementById('tuner');
+  // ——— Feature check ———
   if (!navigator.mediaDevices?.getUserMedia) {
-    tunerDiv.innerHTML = '<p>Microphone access not supported.</p>';
+    document.getElementById('tuner').innerHTML =
+      '<p>Microphone not supported.</p>';
     return;
   }
 
-  // ── 2. Pitch detection (Autocorrelation ACF2+) ─────────
-  function autoCorrelate(buf, sampleRate) {
-    const SIZE = buf.length;
-    let rms = 0;
-    for (let i = 0; i < SIZE; i++) rms += buf[i] * buf[i];
-    rms = Math.sqrt(rms / SIZE);
-    if (rms < 0.01) return -1;  // Too quiet
+  // ——— Grab DOM nodes ———
+  const stringRow    = document.getElementById('stringRow');
+  const prev2        = document.getElementById('prev2');
+  const prev1        = document.getElementById('prev1');
+  const noteMain     = document.getElementById('noteMain');
+  const next1        = document.getElementById('next1');
+  const next2        = document.getElementById('next2');
+  const meterCanvas  = document.getElementById('meterCanvas');
+  const needleCanvas = document.getElementById('needleCanvas');
+  const waveformC    = document.getElementById('waveformCanvas');
+  const freqDisplay  = document.getElementById('freqDisplay');
+  const presetDesc   = document.getElementById('presetDesc');
 
-    // Trim buffer to region above threshold
-    let r1 = 0, r2 = SIZE - 1, thres = 0.2;
-    for (let i = 0; i < SIZE/2; i++) if (Math.abs(buf[i]) < thres) { r1 = i; break; }
-    for (let i = 1; i < SIZE/2; i++) if (Math.abs(buf[SIZE - i]) < thres) { r2 = SIZE - i; break; }
-    buf = buf.slice(r1, r2);
+  const meterCtx  = meterCanvas.getContext('2d');
+  const needleCtx = needleCanvas.getContext('2d');
+  const waveCtx   = waveformC.getContext('2d');
 
-    // Autocorrelation
-    const newSize = buf.length;
-    const c = new Array(newSize).fill(0);
-    for (let i = 0; i < newSize; i++)
-      for (let j = 0; j < newSize - i; j++)
-        c[i] += buf[j] * buf[j + i];
-
-    let d = 0;
-    while (c[d] > c[d+1]) d++;
-    let maxpos = d, maxval = -Infinity;
-    for (let i = d; i < newSize; i++) {
-      if (c[i] > maxval) { maxval = c[i]; maxpos = i; }
-    }
-
-    // Parabolic interpolation
-    let T0 = maxpos;
-    const x1 = c[T0-1], x2 = c[T0], x3 = c[T0+1];
-    const a = (x1 + x3 - 2*x2)/2;
-    const b = (x3 - x1)/2;
-    if (a) T0 = T0 - b/(2*a);
-
-    return sampleRate / T0;
-  }
-
-  // ── 3. Grab DOM elements ─────────────────────────────────
-  const settingsBtn     = document.getElementById('settingsButton');
-  const overlay         = document.getElementById('settingsOverlay');
-  const closeSettings   = document.getElementById('closeSettings');
-  const refFreqInput    = document.getElementById('refFreqInput');
-  const presetSelect    = document.getElementById('presetSelect');
-  const stringButtonsDiv= document.getElementById('stringButtons');
-  const noteCharElem    = document.getElementById('noteChar');
-  const noteStatusElem  = document.getElementById('noteStatus');
-  const waveformCanvas  = document.getElementById('waveform');
-  const waveformCtx     = waveformCanvas.getContext('2d');
-  const needleCanvas    = document.getElementById('needle');
-  const needleCtx       = needleCanvas.getContext('2d');
-  const meterCanvas     = document.getElementById('meterGauge');
-  const meterCtx        = meterCanvas.getContext('2d');
-
-  // ── 4. State variables ──────────────────────────────────
+  // ——— State ———
   let referenceFrequency = 440;
-  let currentStrings     = [];
-  let targetString       = null;
+  let currentPresetName  = Object.keys(window.tuningPresets)[0];
+  let currentStrings     = window.tuningPresets[currentPresetName];
   let prevRms            = 0;
   let lastPluckTime      = 0;
   let smoothedDetune     = 0;
   let lastUiUpdate       = 0;
-  const uiInterval       = 250; // ms throttle
-  const noteStrings      = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+  const uiInterval       = 250;
+  const noteStrings      = [
+    'C','C#','D','D#','E','F','F#','G','G#','A','A#','B'
+  ];
 
-  // ── 5. Populate presets dropdown ─────────────────────────
-  Object.keys(window.tuningPresets).forEach(name => {
-    const opt = document.createElement('option');
-    opt.value = name;
-    opt.textContent = name;
-    presetSelect.appendChild(opt);
-  });
-  const presetNames = Object.keys(window.tuningPresets);
-  if (presetNames.length) {
-    presetSelect.value = presetNames[0];
-    currentStrings = window.tuningPresets[presetNames[0]];
-    targetString = null;
-  }
-  refFreqInput.value = referenceFrequency;
-
-  // ── 6. Render string buttons ────────────────────────────
+  // ——— Populate string buttons & preset desc ———
   function renderStringButtons() {
-    stringButtonsDiv.innerHTML = '';
+    stringRow.innerHTML = '';
     currentStrings.forEach(noteName => {
       const btn = document.createElement('button');
       btn.textContent = noteName;
-      btn.dataset.note = noteName;
-      if (noteName === targetString) btn.classList.add('active');
-      btn.addEventListener('click', () => {
-        targetString = noteName;
-        renderStringButtons();
-      });
-      stringButtonsDiv.appendChild(btn);
+      if (noteName === noteMain.textContent) btn.classList.add('active');
+      stringRow.appendChild(btn);
     });
+    presetDesc.textContent = 
+      `Guitar, ${currentPresetName}, Equal tempered`;
   }
   renderStringButtons();
 
-  // ── 7. Settings overlay wiring ──────────────────────────
-  settingsBtn   .addEventListener('click',   ()=> overlay.classList.add('open'));
-  closeSettings .addEventListener('click',   ()=> overlay.classList.remove('open'));
-  refFreqInput  .addEventListener('input',   ()=> {
-    referenceFrequency = parseFloat(refFreqInput.value) || referenceFrequency;
-  });
-  presetSelect  .addEventListener('change',  ()=> {
-    const name = presetSelect.value;
-    currentStrings = window.tuningPresets[name] || [];
-    if (!currentStrings.includes(targetString)) targetString = null;
-    renderStringButtons();
-  });
-
-  // Convert note name ➔ frequency
-  function noteToFreq(noteName) {
-    const pitchClass = noteName.match(/^[A-G]#?/)[0];
-    const octave     = parseInt(noteName.slice(-1), 10);
-    const semitone   = noteStrings.indexOf(pitchClass) + octave * 12;
-    return referenceFrequency * Math.pow(2, (semitone - 69) / 12);
-  }
-
-  // ── 8. Audio setup ──────────────────────────────────────
+  // ——— Audio setup ———
   const stream       = await navigator.mediaDevices.getUserMedia({ audio: true });
   const audioContext = new (window.AudioContext || window.webkitAudioContext)();
   const source       = audioContext.createMediaStreamSource(stream);
@@ -135,87 +61,152 @@
   const bufferLen    = analyser.fftSize;
   const dataArray    = new Float32Array(bufferLen);
 
-  // ── 9. Main draw loop ───────────────────────────────────
+  // ——— Draw static gauge ticks once ———
+  const cw      = meterCanvas.width;
+  const ch      = meterCanvas.height;
+  const cx      = cw / 2;
+  const cy      = ch;
+  const radius  = cw * 0.45;
+  function drawGaugeTicks() {
+    meterCtx.clearRect(0, 0, cw, ch);
+    for (let i = 0; i <= 20; i++) {
+      const angle = Math.PI - (i / 20) * Math.PI;
+      const inner = radius * 0.85;
+      const x1    = cx + inner * Math.cos(angle);
+      const y1    = cy + inner * Math.sin(angle);
+      const x2    = cx + radius * Math.cos(angle);
+      const y2    = cy + radius * Math.sin(angle);
+      meterCtx.strokeStyle = '#444';
+      meterCtx.lineWidth   = (i % 5 === 0 ? 3 : 1);
+      meterCtx.beginPath();
+      meterCtx.moveTo(x1, y1);
+      meterCtx.lineTo(x2, y2);
+      meterCtx.stroke();
+    }
+  }
+  drawGaugeTicks();
+
+  // ——— Autocorrelation pitch detection ———
+  function autoCorrelate(buf, sampleRate) {
+    let rms = 0;
+    for (let i = 0; i < buf.length; i++) rms += buf[i] * buf[i];
+    rms = Math.sqrt(rms / buf.length);
+    if (rms < 0.01) return -1;
+
+    // trim silence
+    let r1 = 0, r2 = buf.length - 1, th = 0.2;
+    for (let i = 0; i < buf.length/2; i++)
+      if (Math.abs(buf[i]) < th) { r1 = i; break; }
+    for (let i = 1; i < buf.length/2; i++)
+      if (Math.abs(buf[buf.length - i]) < th) { r2 = buf.length - i; break; }
+    const slice = buf.slice(r1, r2);
+
+    // autocorrelation
+    const c = new Array(slice.length).fill(0);
+    for (let i = 0; i < slice.length; i++)
+      for (let j = 0; j + i < slice.length; j++)
+        c[i] += slice[j] * slice[j + i];
+
+    // find peak
+    let d = 0;
+    while (c[d] > c[d+1]) d++;
+    let maxpos = d, maxval = -Infinity;
+    for (let i = d; i < c.length; i++) {
+      if (c[i] > maxval) { maxval = c[i]; maxpos = i; }
+    }
+
+    // refine by parabola
+    const x1 = c[maxpos-1], x2 = c[maxpos], x3 = c[maxpos+1];
+    const a = (x1 + x3 - 2*x2)/2;
+    const b = (x3 - x1)/2;
+    let T0 = maxpos;
+    if (a) T0 = T0 - b/(2*a);
+
+    return sampleRate / T0;
+  }
+
+  // ——— Main draw loop ———
   function draw() {
     requestAnimationFrame(draw);
 
-    // — Waveform —
+    // 1) Waveform
     analyser.getFloatTimeDomainData(dataArray);
-    waveformCtx.fillStyle   = '#111';
-    waveformCtx.fillRect(0, 0, waveformCanvas.width, waveformCanvas.height);
-    waveformCtx.lineWidth   = 2;
-    waveformCtx.strokeStyle = '#0ff';
-    waveformCtx.beginPath();
-    const sliceW = waveformCanvas.width / bufferLen;
-    let x = 0;
+    waveCtx.fillStyle   = '#111';
+    waveCtx.fillRect(0, 0, waveformC.width, waveformC.height);
+    waveCtx.lineWidth   = 2;
+    waveCtx.strokeStyle = '#0ff';
+    waveCtx.beginPath();
+    let x = 0, sliceW = waveformC.width / bufferLen;
     for (let i = 0; i < bufferLen; i++) {
       const v = dataArray[i] * 0.5 + 0.5;
-      const y = v * waveformCanvas.height;
-      i === 0 ? waveformCtx.moveTo(x, y) : waveformCtx.lineTo(x, y);
+      const y = v * waveformC.height;
+      i === 0 ? waveCtx.moveTo(x, y) : waveCtx.lineTo(x, y);
       x += sliceW;
     }
-    waveformCtx.stroke();
+    waveCtx.stroke();
 
-    // — Pitch detection & transient smoothing —
+    // 2) Pitch & smoothing
     const pitch = autoCorrelate(dataArray, audioContext.sampleRate);
-    if (pitch !== -1) {
-      const noteNum = 12 * (Math.log(pitch / referenceFrequency) / Math.log(2)) + 69;
+    if (pitch > 0) {
+      const noteNum = 12 * Math.log(pitch/referenceFrequency)/Math.log(2) + 69;
       const rounded = Math.round(noteNum);
 
-      // RMS for onset
+      // onset detection
       let rms = 0;
-      for (let i = 0; i < bufferLen; i++) rms += dataArray[i] * dataArray[i];
-      rms = Math.sqrt(rms / bufferLen);
-      if (rms > prevRms * 1.3) lastPluckTime = audioContext.currentTime;
+      for (let i = 0; i < bufferLen; i++) rms += dataArray[i]*dataArray[i];
+      rms = Math.sqrt(rms/bufferLen);
+      if (rms > prevRms*1.3) lastPluckTime = audioContext.currentTime;
       prevRms = rms;
 
-      // Adaptive smoothing α
+      // adaptive smoothing
       const delta = audioContext.currentTime - lastPluckTime;
-      const alpha = delta < 0.05 ? 0.02 : delta < 0.2 ? 0.1 : 0.2;
+      const alpha = delta<0.05?0.02:delta<0.2?0.1:0.2;
+      const detRaw = noteNum - rounded;
+      smoothedDetune = alpha*detRaw + (1-alpha)*smoothedDetune;
 
-      // Smooth detune
-      const detuneRaw     = noteNum - rounded;
-      smoothedDetune      = alpha * detuneRaw + (1 - alpha) * smoothedDetune;
-      const angle         = smoothedDetune * (Math.PI / 4);
+      // 3) Draw dynamic arc & needle
+      drawGaugeTicks();
+      const detAngle = (smoothedDetune/0.5)*(Math.PI/2);
+      meterCtx.save();
+      meterCtx.translate(cx, cy);
+      meterCtx.strokeStyle = '#0f0';
+      meterCtx.lineWidth   = 5;
+      meterCtx.beginPath();
+      meterCtx.arc(0, 0, radius*0.9, Math.PI - detAngle, Math.PI + detAngle);
+      meterCtx.stroke();
+      meterCtx.restore();
 
-      // — Needle —
-      needleCtx.clearRect(0, 0, needleCanvas.width, needleCanvas.height);
-      needleCtx.save();
-      needleCtx.translate(needleCanvas.width / 2, needleCanvas.height);
-      needleCtx.rotate(angle);
-      needleCtx.lineWidth   = 4;
-      needleCtx.strokeStyle = '#f0f';
-      needleCtx.beginPath();
-      needleCtx.moveTo(0, 0);
-      needleCtx.lineTo(0, -80);
-      needleCtx.stroke();
-      needleCtx.restore();
-
-      // — Throttled UI updates —
+      // 4) Throttled UI updates every 250ms
       const now = performance.now();
       if (now - lastUiUpdate > uiInterval) {
-        // Note letter
-        noteCharElem.textContent = noteStrings[rounded % 12];
-        // Status text
-        const cents = Math.round(smoothedDetune * 100);
-        noteStatusElem.textContent = Math.abs(cents) < 5
-          ? 'IN TUNE'
-          : (cents > 0 ? 'SHARP' : 'FLAT');
+        // note context
+        const center = rounded;
+        [prev2, prev1, noteMain, next1, next2].forEach((el, idx) => {
+          const offset = idx - 2;
+          const n = center + offset;
+          const name = noteStrings[(n%12+12)%12] + Math.floor(n/12);
+          el.textContent = name;
+          el.classList.toggle('note-large', offset===0);
+        });
 
-        // Highlight closest string button
-        if (currentStrings.length) {
-          const freqs = currentStrings.map(noteToFreq);
-          const diffs = freqs.map(f => Math.abs(pitch - f));
-          const idx   = diffs.indexOf(Math.min(...diffs));
-          targetString = currentStrings[idx];
-          renderStringButtons();
-        }
+        // freq display
+        freqDisplay.textContent = Math.round(pitch) + ' Hz';
+
+        // highlight string closest to pitch
+        let best = 0, bestD = Infinity;
+        currentStrings.forEach((ns,i) => {
+          const f = referenceFrequency * Math.pow(2, 
+            (noteStrings.indexOf(ns.replace(/\d/,'')) + parseInt(ns.slice(-1))*12 - 69)/12
+          );
+          const d = Math.abs(pitch - f);
+          if (d < bestD) { bestD = d; best = i; }
+        });
+        Array.from(stringRow.children).forEach((btn,i) => {
+          btn.classList.toggle('active', i===best);
+        });
 
         lastUiUpdate = now;
       }
-    } else {
-      // No pitch → clear needle
-      needleCtx.clearRect(0, 0, needleCanvas.width, needleCanvas.height);
     }
   }
 
