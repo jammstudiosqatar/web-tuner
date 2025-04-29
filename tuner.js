@@ -150,12 +150,13 @@
         const octave = Math.floor(rounded / 12);
         noteElem.textContent = `${noteStrings[rounded % 12]}${octave} (${pitch.toFixed(2)} Hz)`;
 
-        // — display cents
+        // — display rounded cents (no decimals)
         const centDeviation = smoothedDetune * 100;
+        const centsRounded = Math.round(centDeviation);
         centsElem.textContent =
-          (centDeviation >= 0 ? '+' : '') +
-          centDeviation.toFixed(1) +
-          ' cents';
+        (centsRounded >= 0 ? '+' : '') +
+        centsRounded +
+        ' cents';
 
         // — draw needle
         needleCtx.clearRect(0, 0, needleCanvas.width, needleCanvas.height);
