@@ -1,1 +1,34 @@
+/* Basic reset and centering */
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: #fafafa;
+  color: #333;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 20px;
+}
 
+/* Container sizing */
+#tuner {
+  max-width: 360px;
+  width: 100%;
+  text-align: center;
+}
+
+/* Make canvases responsive */
+canvas {
+  width: 100%;
+  height: auto;
+  display: block;
+  margin: 8px 0;
+}
+
+/* Style the A₄ input */
+input[type="number"] {
+  font-size: 1em;
+  padding: 2px 4px;
+  width: 60px;
+  margin-left: 4px;
+}
