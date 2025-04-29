@@ -15,9 +15,12 @@
     if (rms < 0.01) return -1;  // too quiet
 
     let r1 = 0, r2 = SIZE - 1, thres = 0.2;
-    for (let i = 0; i < SIZE / 2; i++) if (Math.abs(buf[i]) < thres) { r1 = i; break; }
-    for (let i = 1; i < SIZE / 2; i++) if (Math.abs(buf[SIZE - i]) < thres) { r2 = SIZE - i; break; }
+    for (let i = 0; i < SIZE / 2; i++)
+      if (Math.abs(buf[i]) < thres) { r1 = i; break; }
+    for (let i = 1; i < SIZE / 2; i++)
+      if (Math.abs(buf[SIZE - i]) < thres) { r2 = SIZE - i; break; }
     buf = buf.slice(r1, r2);
+
     const newSize = buf.length;
     const c = new Array(newSize).fill(0);
     for (let i = 0; i < newSize; i++)
@@ -25,19 +28,25 @@
         c[i] += buf[j] * buf[j + i];
 
     let d = 0;
-    while (c[d] > c[d+1]) d++;
+    while (c[d] > c[d + 1]) d++;
     let maxval = -1, maxpos = -1;
     for (let i = d; i < newSize; i++) {
       if (c[i] > maxval) { maxval = c[i]; maxpos = i; }
     }
     let T0 = maxpos;
-    // parabolic interpolation
+    // parabolic interpolation for better accuracy
     const x1 = c[T0 - 1], x2 = c[T0], x3 = c[T0 + 1];
-    const a = (x1 + x3 - 2*x2) / 2;
+    const a = (x1 + x3 - 2 * x2) / 2;
     const b = (x3 - x1) / 2;
     if (a) T0 = T0 - b / (2 * a);
+
     return sampleRate / T0;
   }
+
+  // —— transient & smoothing state ——
+  let prevRms = 0;
+  let lastPluckTime = 0;
+  let smoothedDetune = 0;
 
   try {
     // 1️⃣ Get mic audio
@@ -54,25 +63,24 @@
       <div id="note" style="font-size:1.5em; margin:8px;">--</div>
       <canvas id="needle" width="300" height="100"></canvas>
     `;
-    const waveCanvas = document.getElementById('waveform');
-    const waveCtx    = waveCanvas.getContext('2d');
+    const waveCanvas   = document.getElementById('waveform');
+    const waveCtx      = waveCanvas.getContext('2d');
     const needleCanvas = document.getElementById('needle');
     const needleCtx    = needleCanvas.getContext('2d');
-    const noteElem   = document.getElementById('note');
-    const bufferLen  = analyser.fftSize;
-    const dataArray  = new Float32Array(bufferLen);
-
-    const noteStrings = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+    const noteElem     = document.getElementById('note');
+    const bufferLen    = analyser.fftSize;
+    const dataArray    = new Float32Array(bufferLen);
+    const noteStrings  = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 
     // 3️⃣ Animation & analysis loop
     function draw() {
       requestAnimationFrame(draw);
       analyser.getFloatTimeDomainData(dataArray);
 
-      // — Waveform
-      waveCtx.fillStyle = '#f5f5f5';
+      // — Waveform drawing
+      waveCtx.fillStyle   = '#f5f5f5';
       waveCtx.fillRect(0, 0, waveCanvas.width, waveCanvas.height);
-      waveCtx.lineWidth = 2;
+      waveCtx.lineWidth   = 2;
       waveCtx.strokeStyle = '#333';
       waveCtx.beginPath();
       const sliceW = waveCanvas.width / bufferLen;
@@ -89,15 +97,41 @@
       // — Pitch detection
       const pitch = autoCorrelate(dataArray, audioContext.sampleRate);
       if (pitch !== -1) {
-        // map to MIDI note number
+        // map to fractional MIDI note
         const noteNum = 12 * (Math.log(pitch / 440) / Math.log(2)) + 69;
         const rounded = Math.round(noteNum);
-        const noteName = noteStrings[rounded % 12] + Math.floor(rounded / 12);
-        noteElem.textContent = `${noteName}  (${pitch.toFixed(2)} Hz)`;
 
-        // draw needle
-        const detune = noteNum - rounded;               // ±0.5 semitones
-        const angle  = detune * (Math.PI / 4);          // map ±0.5 → ±45°
+        // —— INSERT: transient‐aware smoothing —— 
+        // 1️⃣ Compute RMS energy
+        let rms = 0;
+        for (let i = 0; i < bufferLen; i++) rms += dataArray[i] * dataArray[i];
+        rms = Math.sqrt(rms / bufferLen);
+
+        // 2️⃣ Onset detection
+        const onsetThreshold = 1.3;
+        if (rms > prevRms * onsetThreshold) {
+          lastPluckTime = audioContext.currentTime;
+        }
+        prevRms = rms;
+
+        // 3️⃣ Adaptive smoothing α
+        const delta = audioContext.currentTime - lastPluckTime;
+        let alpha;
+        if (delta < 0.05)         alpha = 0.02;  // heavy smoothing
+        else if (delta < 0.2)     alpha = 0.1;   // medium smoothing
+        else                      alpha = 0.2;   // normal smoothing
+
+        // 4️⃣ Smooth detune
+        const detuneRaw = noteNum - rounded;  // ±0.5 semitones
+        smoothedDetune = alpha * detuneRaw + (1 - alpha) * smoothedDetune;
+        const angle = smoothedDetune * (Math.PI / 4);
+        // —— END INSERT —— 
+
+        // — Display note text
+        const octave = Math.floor(rounded / 12);
+        noteElem.textContent = `${noteStrings[rounded % 12]}${octave} (${pitch.toFixed(2)} Hz)`;
+
+        // — Draw the needle
         needleCtx.clearRect(0, 0, needleCanvas.width, needleCanvas.height);
         needleCtx.save();
         needleCtx.translate(needleCanvas.width / 2, needleCanvas.height);
@@ -108,7 +142,9 @@
         needleCtx.lineTo(0, -80);
         needleCtx.stroke();
         needleCtx.restore();
+
       } else {
+        // no pitch: clear display
         noteElem.textContent = '--';
         needleCtx.clearRect(0, 0, needleCanvas.width, needleCanvas.height);
       }
