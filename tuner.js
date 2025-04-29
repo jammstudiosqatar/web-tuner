@@ -1,48 +1,39 @@
 // tuner.js
 (async function() {
-  // 1) Feature check
+  // 1) Browser support
   const tunerDiv = document.getElementById('tuner');
   if (!navigator.mediaDevices?.getUserMedia) {
     tunerDiv.innerHTML = '<p>Microphone access not supported.</p>';
     return;
   }
 
-  // 2) Autocorrelation pitch detector (ACF2+)
-  function autoCorrelate(buf, sampleRate) {
+  // 2) Autocorrelation (ACF2+)
+  function autoCorrelate(buf, sr) {
     const N = buf.length;
     let sum = 0;
     for (let i = 0; i < N; i++) sum += buf[i] * buf[i];
     const rms = Math.sqrt(sum / N);
-    if (rms < 0.01) return -1;  // too quiet
-
-    // trim silence
+    if (rms < 0.01) return -1;
     let r1 = 0, r2 = N - 1, th = 0.2;
     for (let i = 0; i < N/2; i++) if (Math.abs(buf[i]) < th) { r1 = i; break; }
-    for (let i = 1; i < N/2; i++) if (Math.abs(buf[N-i]) < th) { r2 = N - i; break; }
+    for (let i = 1; i < N/2; i++) if (Math.abs(buf[N-i]) < th) { r2 = N-i; break; }
     const slice = buf.slice(r1, r2);
-
-    // autocorrelation
     const C = new Array(slice.length).fill(0);
     for (let i = 0; i < slice.length; i++)
       for (let j = 0; j + i < slice.length; j++)
         C[i] += slice[j] * slice[j + i];
-
-    // find peak
     let d = 0;
     while (C[d] > C[d+1]) d++;
-    let maxpos = d, maxval = -Infinity;
+    let maxpos = d, maxv = -Infinity;
     for (let i = d; i < C.length; i++) {
-      if (C[i] > maxval) { maxval = C[i]; maxpos = i; }
+      if (C[i] > maxv) { maxv = C[i]; maxpos = i; }
     }
-
-    // parabolic interpolation
     let T0 = maxpos;
     const x1 = C[T0-1], x2 = C[T0], x3 = C[T0+1];
     const a = (x1 + x3 - 2*x2)/2;
     const b = (x3 - x1)/2;
-    if (a) T0 = T0 - b/(2*a);
-
-    return sampleRate / T0;
+    if (a) T0 -= b/(2*a);
+    return sr / T0;
   }
 
   // 3) DOM refs
@@ -70,10 +61,10 @@
   let lastPluckTime      = 0;
   let smoothedDetune     = 0;
   let lastUiUpdate       = 0;
-  const uiInterval       = 250;  // ms
+  const uiInterval       = 250;  // ms throttle
   const noteStrings      = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 
-  // Render string buttons & description
+  // Render string buttons + description
   function renderStringButtons() {
     stringRow.innerHTML = '';
     currentStrings.forEach(nm => {
@@ -96,17 +87,17 @@
   const bufferLen    = analyser.fftSize;
   const dataArray    = new Float32Array(bufferLen);
 
-  // 6) Gauge geometry (wider)
-  const cw       = meterCanvas.width;                     // e.g. 720
-  const ch       = meterCanvas.height;                    // e.g. 360
-  const cx       = cw / 2;
-  const cy       = ch;                                    // pivot at bottom edge
-  const maxAngle = Math.PI / 6;                          // ±30°
-  // radius so that ±30° arc spans full canvas width
-  const radius   = cw / (2 * Math.cos(maxAngle));
-  const innerR   = radius * 0.85;
-  const outerR   = radius * 0.95;
-  const ticks    = 20;   // 10-cent steps
+  // 6) Gauge geometry (huge)
+  const cw         = meterCanvas.width;           // e.g. 1440
+  const ch         = meterCanvas.height;          // e.g. 720
+  const cx         = cw / 2;
+  const pivotFactor= 2.5;                        // lifts the fulcrum way below canvas
+  const cy         = ch * pivotFactor;
+  const maxAngle   = Math.PI/6;                  // ±30°
+  const radius     = cw / (2 * Math.cos(maxAngle));
+  const innerR     = radius * 0.85;
+  const outerR     = radius * 0.95;
+  const ticks      = 20;                         // 10-cent steps
 
   // Draw static non-linear ticks & labels
   function drawGaugeTicks() {
@@ -118,9 +109,9 @@
       const sgn   = norm < 0 ? -1 : 1;
       const rpos  = sgn * Math.sqrt(Math.abs(norm));
       const off   = rpos * maxAngle;
-      const theta = -Math.PI/2 + off;  // vertical = -90°
+      const theta = -Math.PI/2 + off;  // vertical = –90°
 
-      // Tick endpoints
+      // endpoints
       const x1 = cx + innerR * Math.cos(theta);
       const y1 = cy + innerR * Math.sin(theta);
       const x2 = cx + outerR * Math.cos(theta);
@@ -133,7 +124,6 @@
       meterCtx.lineTo(x2, y2);
       meterCtx.stroke();
 
-      // Labels at ±100, ±50, 0
       if (i % 5 === 0) {
         meterCtx.fillStyle    = '#888';
         meterCtx.font         = '12px Arial';
@@ -153,7 +143,7 @@
   function draw() {
     requestAnimationFrame(draw);
 
-    // a) Waveform
+    // waveform
     analyser.getFloatTimeDomainData(dataArray);
     waveCtx.fillStyle   = '#111';
     waveCtx.fillRect(0, 0, waveformC.width, waveformC.height);
@@ -164,67 +154,64 @@
     for (let i = 0; i < bufferLen; i++) {
       const v = dataArray[i]*0.5 + 0.5;
       const y = v * waveformC.height;
-      i===0 ? waveCtx.moveTo(x, y) : waveCtx.lineTo(x, y);
+      i===0? waveCtx.moveTo(x,y) : waveCtx.lineTo(x,y);
       x += step;
     }
     waveCtx.stroke();
 
-    // b) Pitch detect & transient smoothing
+    // pitch & transient smoothing
     const pitch = autoCorrelate(dataArray, audioContext.sampleRate);
     if (pitch > 0) {
-      const noteNum = 12 * (Math.log(pitch/referenceFrequency)/Math.log(2)) + 69;
+      const noteNum = 12*(Math.log(pitch/referenceFrequency)/Math.log(2)) + 69;
       const rounded = Math.round(noteNum);
 
-      // onset detection
+      // onset RMS
       let rms=0;
       for (let i=0;i<bufferLen;i++) rms+=dataArray[i]*dataArray[i];
       rms = Math.sqrt(rms/bufferLen);
       if (rms > prevRms*1.3) lastPluckTime = audioContext.currentTime;
       prevRms = rms;
 
-      // much slower smoothing α
+      // much slower α
       const dt    = audioContext.currentTime - lastPluckTime;
-      let alpha   = dt < 0.1  ? 0.002
-                  : dt < 0.5  ? 0.005
-                  :             0.01;
+      const alpha = dt<0.1  ? 0.001
+                  : dt<0.5  ? 0.0025
+                  :            0.005;
 
-      const detRaw       = noteNum - rounded;
-      smoothedDetune     = alpha * detRaw + (1 - alpha) * smoothedDetune;
+      const detRaw = noteNum - rounded;
+      smoothedDetune = alpha*detRaw + (1-alpha)*smoothedDetune;
 
-      // map detune to ±30° off vertical
-      const centsNorm    = Math.max(-100, Math.min(100, smoothedDetune*100));
-      const sgn          = centsNorm < 0 ? -1 : 1;
-      const rpos         = sgn * Math.sqrt(Math.abs(centsNorm)/100);
-      const off          = rpos * maxAngle;
-      const theta        = -Math.PI/2 + off;
+      // map to ±30°
+      const centsNorm = Math.max(-100, Math.min(100, smoothedDetune*100));
+      const sgn       = centsNorm<0?-1:1;
+      const rpos      = sgn * Math.sqrt(Math.abs(centsNorm)/100);
+      const off       = rpos * maxAngle;
+      const theta     = -Math.PI/2 + off;
 
-      // c) Draw the long needle
-      needleCtx.clearRect(0, 0, needleCanvas.width, needleCanvas.height);
+      // draw long needle
+      needleCtx.clearRect(0,0,needleCanvas.width,needleCanvas.height);
       needleCtx.save();
       needleCtx.translate(cx, cy);
       needleCtx.rotate(off);
       needleCtx.lineWidth   = 4;
       needleCtx.strokeStyle = '#f0f';
       needleCtx.beginPath();
-      needleCtx.moveTo(0, 0);
+      needleCtx.moveTo(0,0);
       needleCtx.lineTo(0, -outerR * 1.0);
       needleCtx.stroke();
       needleCtx.restore();
 
-      // d) Throttled UI updates (every 250ms)
+      // throttled text/UI
       const now = performance.now();
       if (now - lastUiUpdate > uiInterval) {
-        // note context strip
         const center = rounded;
         [prev2,prev1,noteMain,next1,next2].forEach((el,i) => {
-          const delta = i - 2;
-          const n     = center + delta;
+          const d = i-2, n = center+d;
           el.textContent = noteStrings[(n%12+12)%12] + Math.floor(n/12);
-          el.classList.toggle('note-large', delta===0);
+          el.classList.toggle('note-large', d===0);
         });
-        // frequency
         freqDisplay.textContent = Math.round(pitch) + ' Hz';
-        // highlight closest string
+
         let best=0, bd=Infinity;
         currentStrings.forEach((nm,i) => {
           const pc   = nm.match(/^[A-G]#?/)[0];
@@ -232,7 +219,7 @@
           const semi = noteStrings.indexOf(pc) + oct*12;
           const fstr = referenceFrequency * Math.pow(2,(semi-69)/12);
           const dval = Math.abs(pitch - fstr);
-          if (dval < bd) { bd = dval; best = i; }
+          if (dval<bd) { bd=dval; best=i; }
         });
         Array.from(stringRow.children).forEach((btn,i) => {
           btn.classList.toggle('active', i===best);
