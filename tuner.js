@@ -181,6 +181,15 @@
       const detRaw = noteNum - rounded;
       smoothedDetune = alpha*detRaw + (1-alpha)*smoothedDetune;
 
+      // dead-zone for small cent errors (±0.5 cents)
+      const cents = smoothedDetune * 100;
+      if (Math.abs(cents) < 0.5) {
+        smoothedDetune = 0;
+        noteMain.classList.add('tuned');
+      } else {
+        noteMain.classList.remove('tuned');
+      }
+
       // map to ±30° off vertical
       const centsNorm = Math.max(-100, Math.min(100, smoothedDetune*100));
       const sgn       = centsNorm<0?-1:1;
