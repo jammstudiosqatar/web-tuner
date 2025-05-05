@@ -1,6 +1,6 @@
 // tuner.js
 (async function() {
-  // 1) Feature check
+  // 1) Browser support
   const tunerDiv = document.getElementById('tuner');
   if (!navigator.mediaDevices?.getUserMedia) {
     tunerDiv.innerHTML = '<p>Microphone access not supported.</p>';
@@ -8,7 +8,7 @@
   }
 
   // 2) Autocorrelation pitch detector (ACF2+)
-  function autoCorrelate(buf, sampleRate) {
+  function autoCorrelate(buf, sr) {
     const N = buf.length;
     let sum = 0;
     for (let i = 0; i < N; i++) sum += buf[i] * buf[i];
@@ -41,7 +41,7 @@
     const a = (x1 + x3 - 2*x2)/2, b = (x3 - x1)/2;
     if (a) T0 -= b/(2*a);
 
-    return sampleRate / T0;
+    return sr / T0;
   }
 
   // 3) DOM refs
@@ -69,10 +69,12 @@
   let lastPluckTime      = 0;
   let smoothedDetune     = 0;
   let lastUiUpdate       = 0;
+  let deadzoneStartTime  = null;
   const uiInterval       = 250;  // ms
   const noteStrings      = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+  const exponent         = 0.3;  // compress extremes
 
-  // render string buttons & description
+  // render string buttons + description
   function renderStringButtons() {
     stringRow.innerHTML = '';
     currentStrings.forEach(nm => {
@@ -105,7 +107,6 @@
   const innerR   = radius * 0.85;
   const outerR   = radius * 0.95;
   const ticks    = 20;                     // 10-cent steps
-  const exponent = 0.3;                    // smaller than 0.5 to compress extremes
 
   // draw static non-linear ticks & labels
   function drawGaugeTicks() {
@@ -174,29 +175,36 @@
       const noteNum = 12 * (Math.log(pitch / referenceFrequency) / Math.log(2)) + 69;
       const rounded = Math.round(noteNum);
 
-      // RMS onset
+      // onset RMS
       let rms=0;
       for (let i=0;i<bufferLen;i++) rms+=dataArray[i]*dataArray[i];
       rms = Math.sqrt(rms/bufferLen);
       if (rms > prevRms * 1.3) lastPluckTime = audioContext.currentTime;
       prevRms = rms;
 
-      // slower smoothing α
+      // split-alpha smoothing
       const dt = audioContext.currentTime - lastPluckTime;
-      let alpha = dt < 0.1  ? 0.001
-                : dt < 0.5  ? 0.0025
-                :             0.005;
+      const alpha = dt < 0.05   ? 0.00075
+                  : dt < 0.5    ? 0.001875
+                  :                0.00375;
 
       const detRaw = noteNum - rounded;
       smoothedDetune = alpha * detRaw + (1 - alpha) * smoothedDetune;
 
-      // dead-zone for display (±0.5 cents)
+      // persistent ±0.2-cent deadzone
       const cents = smoothedDetune * 100;
+      const nowMs = performance.now();
       let displayDetune = smoothedDetune;
-      if (Math.abs(cents) < 0.5) {
-        displayDetune = 0;
-        noteMain.classList.add('tuned');
+      if (Math.abs(cents) < 0.2) {
+        if (deadzoneStartTime === null) deadzoneStartTime = nowMs;
+        if (nowMs - deadzoneStartTime >= 200) {
+          displayDetune = 0;
+          noteMain.classList.add('tuned');
+        } else {
+          noteMain.classList.remove('tuned');
+        }
       } else {
+        deadzoneStartTime = null;
         noteMain.classList.remove('tuned');
       }
 
@@ -220,8 +228,7 @@
       needleCtx.restore();
 
       // d) throttled UI updates
-      const now = performance.now();
-      if (now - lastUiUpdate > uiInterval) {
+      if (nowMs - lastUiUpdate > uiInterval) {
         const center = rounded;
         [prev2,prev1,noteMain,next1,next2].forEach((el,i) => {
           const d = i - 2, n = center + d;
@@ -243,7 +250,7 @@
           btn.classList.toggle('active', i===best);
         });
 
-        lastUiUpdate = now;
+        lastUiUpdate = nowMs;
       }
     }
   }
