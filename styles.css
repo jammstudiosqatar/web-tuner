@@ -91,3 +91,11 @@ body {
   font-size: 0.9em;
   color: #777;
 }
+
+/* Highlight the central note when perfectly in-tune */
+.note-large.tuned {
+  color: #0f0;                      /* bright green */
+  text-shadow: 0 0 8px rgba(0,255,0,0.8);
+  transition: text-shadow 0.2s ease-in-out;
+}
+
