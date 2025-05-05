@@ -174,9 +174,9 @@
 
       // very slow smoothing
       const dt = audioContext.currentTime - lastPluckTime;
-      let alpha = dt<0.1  ? 0.001
-                : dt<0.5  ? 0.0025
-                :            0.005;
+      const alpha = dt < 0.05    ? 0.0005    // heavy smoothing for first 50 ms
+                  : dt < 0.5     ? 0.00125   // medium smoothing up to 500 ms
+                  :               0.0025;   // normal smoothing afterwards
 
       const detRaw = noteNum - rounded;
       smoothedDetune = alpha*detRaw + (1-alpha)*smoothedDetune;
