@@ -1,6 +1,6 @@
 // tuner.js
 (async function() {
-  // 1) Browser support
+  // 1) Feature check
   const tunerDiv = document.getElementById('tuner');
   if (!navigator.mediaDevices?.getUserMedia) {
     tunerDiv.innerHTML = '<p>Microphone access not supported.</p>';
@@ -13,12 +13,12 @@
     let sum = 0;
     for (let i = 0; i < N; i++) sum += buf[i] * buf[i];
     const rms = Math.sqrt(sum / N);
-    if (rms < 0.01) return -1;  // too quiet
+    if (rms < 0.01) return -1;
 
-    // trim silence
+    // trim silence edges
     let r1 = 0, r2 = N - 1, th = 0.2;
     for (let i = 0; i < N/2; i++) if (Math.abs(buf[i]) < th) { r1 = i; break; }
-    for (let i = 1; i < N/2; i++) if (Math.abs(buf[N - i]) < th) { r2 = N - i; break; }
+    for (let i = 1; i < N/2; i++) if (Math.abs(buf[N-i]) < th) { r2 = N - i; break; }
     const slice = buf.slice(r1, r2);
 
     // autocorrelation
@@ -38,14 +38,13 @@
     // parabolic interpolation
     let T0 = maxpos;
     const x1 = C[T0-1], x2 = C[T0], x3 = C[T0+1];
-    const a = (x1 + x3 - 2*x2)/2;
-    const b = (x3 - x1)/2;
+    const a = (x1 + x3 - 2*x2)/2, b = (x3 - x1)/2;
     if (a) T0 -= b/(2*a);
 
     return sampleRate / T0;
   }
 
-  // 3) DOM references
+  // 3) DOM refs
   const stringRow    = document.getElementById('stringRow');
   const prev2        = document.getElementById('prev2');
   const prev1        = document.getElementById('prev1');
@@ -73,7 +72,7 @@
   const uiInterval       = 250;  // ms
   const noteStrings      = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 
-  // render string buttons + description
+  // render string buttons & description
   function renderStringButtons() {
     stringRow.innerHTML = '';
     currentStrings.forEach(nm => {
@@ -96,7 +95,7 @@
   const bufferLen    = analyser.fftSize;
   const dataArray    = new Float32Array(bufferLen);
 
-  // 6) Gauge geometry (huge canvas)
+  // 6) Gauge geometry
   const cw       = meterCanvas.width;      // e.g. 1440
   const ch       = meterCanvas.height;     // e.g. 720
   const cx       = cw / 2;
@@ -106,6 +105,7 @@
   const innerR   = radius * 0.85;
   const outerR   = radius * 0.95;
   const ticks    = 20;                     // 10-cent steps
+  const exponent = 0.3;                    // smaller than 0.5 to compress extremes
 
   // draw static non-linear ticks & labels
   function drawGaugeTicks() {
@@ -115,10 +115,11 @@
       const cents = -100 + (i * 200 / ticks);
       const norm  = cents / 100;
       const sgn   = norm < 0 ? -1 : 1;
-      const rpos  = sgn * Math.sqrt(Math.abs(norm));
+      const rpos  = sgn * Math.pow(Math.abs(norm), exponent);
       const off   = rpos * maxAngle;
       const theta = -Math.PI/2 + off;  // vertical = –90°
 
+      // tick endpoints
       const x1 = cx + innerR * Math.cos(theta);
       const y1 = cy + innerR * Math.sin(theta);
       const x2 = cx + outerR * Math.cos(theta);
@@ -131,6 +132,7 @@
       meterCtx.lineTo(x2,y2);
       meterCtx.stroke();
 
+      // labels at –100, –50, 0, +50, +100
       if (i % 5 === 0) {
         meterCtx.fillStyle    = '#888';
         meterCtx.font         = '12px Arial';
@@ -150,7 +152,7 @@
   function draw() {
     requestAnimationFrame(draw);
 
-    // waveform
+    // a) waveform
     analyser.getFloatTimeDomainData(dataArray);
     waveCtx.fillStyle   = '#111';
     waveCtx.fillRect(0,0,waveformC.width,waveformC.height);
@@ -166,20 +168,20 @@
     }
     waveCtx.stroke();
 
-    // pitch & smoothing
+    // b) pitch & smoothing
     const pitch = autoCorrelate(dataArray, audioContext.sampleRate);
     if (pitch > 0) {
       const noteNum = 12 * (Math.log(pitch / referenceFrequency) / Math.log(2)) + 69;
       const rounded = Math.round(noteNum);
 
-      // onset RMS
+      // RMS onset
       let rms=0;
       for (let i=0;i<bufferLen;i++) rms+=dataArray[i]*dataArray[i];
       rms = Math.sqrt(rms/bufferLen);
       if (rms > prevRms * 1.3) lastPluckTime = audioContext.currentTime;
       prevRms = rms;
 
-      // very slow smoothing α
+      // slower smoothing α
       const dt = audioContext.currentTime - lastPluckTime;
       let alpha = dt < 0.1  ? 0.001
                 : dt < 0.5  ? 0.0025
@@ -188,8 +190,8 @@
       const detRaw = noteNum - rounded;
       smoothedDetune = alpha * detRaw + (1 - alpha) * smoothedDetune;
 
-      // dead-zone for display (±0.5 cents), without clobbering smoothing
-      const cents      = smoothedDetune * 100;
+      // dead-zone for display (±0.5 cents)
+      const cents = smoothedDetune * 100;
       let displayDetune = smoothedDetune;
       if (Math.abs(cents) < 0.5) {
         displayDetune = 0;
@@ -198,14 +200,13 @@
         noteMain.classList.remove('tuned');
       }
 
-      // map displayDetune to ±30° off vertical
+      // c) draw needle with compressed extremes
       const centsNorm = Math.max(-100, Math.min(100, displayDetune * 100));
       const sgn       = centsNorm < 0 ? -1 : 1;
-      const rpos      = sgn * Math.sqrt(Math.abs(centsNorm)/100);
+      const rpos      = sgn * Math.pow(Math.abs(centsNorm)/100, exponent);
       const off       = rpos * maxAngle;
       const theta     = -Math.PI/2 + off;
 
-      // draw needle
       needleCtx.clearRect(0,0,needleCanvas.width,needleCanvas.height);
       needleCtx.save();
       needleCtx.translate(cx, cy);
@@ -218,7 +219,7 @@
       needleCtx.stroke();
       needleCtx.restore();
 
-      // throttled UI updates
+      // d) throttled UI updates
       const now = performance.now();
       if (now - lastUiUpdate > uiInterval) {
         const center = rounded;
