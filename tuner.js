@@ -1,6 +1,6 @@
 // tuner.js
 (async function() {
-  // 1) Browser support
+  // 1) Feature check
   const tunerDiv = document.getElementById('tuner');
   if (!navigator.mediaDevices?.getUserMedia) {
     tunerDiv.innerHTML = '<p>Microphone access not supported.</p>';
@@ -13,12 +13,14 @@
     let sum = 0;
     for (let i = 0; i < N; i++) sum += buf[i] * buf[i];
     const rms = Math.sqrt(sum / N);
-    if (rms < 0.01) return -1;
+    if (rms < 0.01) return -1; // too quiet
 
     // trim silence edges
     let r1 = 0, r2 = N - 1, th = 0.2;
-    for (let i = 0; i < N/2; i++) if (Math.abs(buf[i]) < th) { r1 = i; break; }
-    for (let i = 1; i < N/2; i++) if (Math.abs(buf[N-i]) < th) { r2 = N - i; break; }
+    for (let i = 0; i < N/2; i++)
+      if (Math.abs(buf[i]) < th) { r1 = i; break; }
+    for (let i = 1; i < N/2; i++)
+      if (Math.abs(buf[N - i]) < th) { r2 = N - i; break; }
     const slice = buf.slice(r1, r2);
 
     // autocorrelation
@@ -38,24 +40,24 @@
     // parabolic interpolation
     let T0 = maxpos;
     const x1 = C[T0-1], x2 = C[T0], x3 = C[T0+1];
-    const a = (x1 + x3 - 2*x2)/2, b = (x3 - x1)/2;
-    if (a) T0 -= b/(2*a);
+    const a = (x1 + x3 - 2*x2) / 2;
+    const b = (x3 - x1) / 2;
+    if (a) T0 -= b / (2*a);
 
     return sr / T0;
   }
 
-  // 3) DOM refs
-  const stringRow    = document.getElementById('stringRow');
-  const prev2        = document.getElementById('prev2');
-  const prev1        = document.getElementById('prev1');
-  const noteMain     = document.getElementById('noteMain');
-  const next1        = document.getElementById('next1');
-  const next2        = document.getElementById('next2');
-  const meterCanvas  = document.getElementById('meterCanvas');
-  const needleCanvas = document.getElementById('needleCanvas');
-  const waveformC    = document.getElementById('waveformCanvas');
-  const freqDisplay  = document.getElementById('freqDisplay');
-  const presetDesc   = document.getElementById('presetDesc');
+  // 3) DOM references
+  const prev2       = document.getElementById('prev2');
+  const prev1       = document.getElementById('prev1');
+  const noteMain    = document.getElementById('noteMain');
+  const next1       = document.getElementById('next1');
+  const next2       = document.getElementById('next2');
+  const meterCanvas = document.getElementById('meterCanvas');
+  const needleCanvas= document.getElementById('needleCanvas');
+  const waveformC   = document.getElementById('waveformCanvas');
+  const freqDisplay = document.getElementById('freqDisplay');
+  const presetDesc  = document.getElementById('presetDesc');
 
   const meterCtx  = meterCanvas.getContext('2d');
   const needleCtx = needleCanvas.getContext('2d');
@@ -64,7 +66,6 @@
   // 4) State & constants
   let referenceFrequency = 440;
   let currentPresetName  = Object.keys(window.tuningPresets)[0];
-  let currentStrings     = window.tuningPresets[currentPresetName];
   let prevRms            = 0;
   let lastPluckTime      = 0;
   let smoothedDetune     = 0;
@@ -72,20 +73,10 @@
   let deadzoneStartTime  = null;
   const uiInterval       = 250;  // ms
   const noteStrings      = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
-  const exponent         = 0.3;  // compress extremes
+  const exponent         = 0.3; // compress outer ±50–100c
 
-  // render string buttons + description
-  function renderStringButtons() {
-    stringRow.innerHTML = '';
-    currentStrings.forEach(nm => {
-      const btn = document.createElement('button');
-      btn.textContent = nm;
-      if (nm === noteMain.textContent) btn.classList.add('active');
-      stringRow.appendChild(btn);
-    });
-    presetDesc.textContent = `Guitar, ${currentPresetName}, Equal tempered`;
-  }
-  renderStringButtons();
+  // initialize preset description
+  presetDesc.textContent = `Guitar, ${currentPresetName}, Equal tempered`;
 
   // 5) Audio setup
   const stream       = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -101,7 +92,7 @@
   const cw       = meterCanvas.width;      // e.g. 1440
   const ch       = meterCanvas.height;     // e.g. 720
   const cx       = cw / 2;
-  const cy       = ch;                     // pivot at bottom
+  const cy       = ch;                     // pivot at bottom edge
   const maxAngle = Math.PI / 6;           // ±30°
   const radius   = cw / (2 * Math.cos(maxAngle));
   const innerR   = radius * 0.85;
@@ -110,7 +101,7 @@
 
   // draw static non-linear ticks & labels
   function drawGaugeTicks() {
-    meterCtx.clearRect(0,0,cw,ch);
+    meterCtx.clearRect(0, 0, cw, ch);
     meterCtx.lineCap = 'round';
     for (let i = 0; i <= ticks; i++) {
       const cents = -100 + (i * 200 / ticks);
@@ -129,8 +120,8 @@
       meterCtx.strokeStyle = '#444';
       meterCtx.lineWidth   = (i % 5 === 0 ? 3 : 1);
       meterCtx.beginPath();
-      meterCtx.moveTo(x1,y1);
-      meterCtx.lineTo(x2,y2);
+      meterCtx.moveTo(x1, y1);
+      meterCtx.lineTo(x2, y2);
       meterCtx.stroke();
 
       // labels at –100, –50, 0, +50, +100
@@ -149,14 +140,14 @@
   }
   drawGaugeTicks();
 
-  // 7) Main loop
+  // 7) Main animation loop
   function draw() {
     requestAnimationFrame(draw);
 
     // a) waveform
     analyser.getFloatTimeDomainData(dataArray);
     waveCtx.fillStyle   = '#111';
-    waveCtx.fillRect(0,0,waveformC.width,waveformC.height);
+    waveCtx.fillRect(0, 0, waveformC.width, waveformC.height);
     waveCtx.lineWidth   = 2;
     waveCtx.strokeStyle = '#0ff';
     waveCtx.beginPath();
@@ -164,21 +155,21 @@
     for (let i = 0; i < bufferLen; i++) {
       const v = dataArray[i] * 0.5 + 0.5;
       const y = v * waveformC.height;
-      i===0 ? waveCtx.moveTo(x,y) : waveCtx.lineTo(x,y);
+      i === 0 ? waveCtx.moveTo(x, y) : waveCtx.lineTo(x, y);
       x += step;
     }
     waveCtx.stroke();
 
-    // b) pitch & smoothing
+    // b) pitch detect & smoothing
     const pitch = autoCorrelate(dataArray, audioContext.sampleRate);
     if (pitch > 0) {
       const noteNum = 12 * (Math.log(pitch / referenceFrequency) / Math.log(2)) + 69;
       const rounded = Math.round(noteNum);
 
-      // onset RMS
-      let rms=0;
-      for (let i=0;i<bufferLen;i++) rms+=dataArray[i]*dataArray[i];
-      rms = Math.sqrt(rms/bufferLen);
+      // onset detection (RMS jump)
+      let rms = 0;
+      for (let i = 0; i < bufferLen; i++) rms += dataArray[i] * dataArray[i];
+      rms = Math.sqrt(rms / bufferLen);
       if (rms > prevRms * 1.3) lastPluckTime = audioContext.currentTime;
       prevRms = rms;
 
@@ -191,7 +182,7 @@
       const detRaw = noteNum - rounded;
       smoothedDetune = alpha * detRaw + (1 - alpha) * smoothedDetune;
 
-      // persistent ±0.2-cent deadzone
+      // persistent ±0.2-cent dead-zone after 200 ms
       const cents = smoothedDetune * 100;
       const nowMs = performance.now();
       let displayDetune = smoothedDetune;
@@ -211,45 +202,31 @@
       // c) draw needle with compressed extremes
       const centsNorm = Math.max(-100, Math.min(100, displayDetune * 100));
       const sgn       = centsNorm < 0 ? -1 : 1;
-      const rpos      = sgn * Math.pow(Math.abs(centsNorm)/100, exponent);
+      const rpos      = sgn * Math.pow(Math.abs(centsNorm) / 100, exponent);
       const off       = rpos * maxAngle;
       const theta     = -Math.PI/2 + off;
 
-      needleCtx.clearRect(0,0,needleCanvas.width,needleCanvas.height);
+      needleCtx.clearRect(0, 0, needleCanvas.width, needleCanvas.height);
       needleCtx.save();
       needleCtx.translate(cx, cy);
       needleCtx.rotate(off);
       needleCtx.lineWidth   = 4;
       needleCtx.strokeStyle = '#f0f';
       needleCtx.beginPath();
-      needleCtx.moveTo(0,0);
+      needleCtx.moveTo(0, 0);
       needleCtx.lineTo(0, -outerR);
       needleCtx.stroke();
       needleCtx.restore();
 
-      // d) throttled UI updates
+      // d) throttled UI text
       if (nowMs - lastUiUpdate > uiInterval) {
         const center = rounded;
-        [prev2,prev1,noteMain,next1,next2].forEach((el,i) => {
+        [prev2, prev1, noteMain, next1, next2].forEach((el, i) => {
           const d = i - 2, n = center + d;
-          el.textContent = noteStrings[(n%12+12)%12] + Math.floor(n/12);
-          el.classList.toggle('note-large', d===0);
+          el.textContent = noteStrings[(n % 12 + 12) % 12] + Math.floor(n / 12);
+          el.classList.toggle('note-large', d === 0);
         });
         freqDisplay.textContent = Math.round(pitch) + ' Hz';
-
-        let best=0, bd=Infinity;
-        currentStrings.forEach((nm,i) => {
-          const pc   = nm.match(/^[A-G]#?/)[0];
-          const oct  = parseInt(nm.slice(-1),10);
-          const semi = noteStrings.indexOf(pc) + oct*12;
-          const fstr = referenceFrequency * Math.pow(2,(semi-69)/12);
-          const dval = Math.abs(pitch - fstr);
-          if (dval < bd) { bd = dval; best = i; }
-        });
-        Array.from(stringRow.children).forEach((btn,i) => {
-          btn.classList.toggle('active', i===best);
-        });
-
         lastUiUpdate = nowMs;
       }
     }
