@@ -1,15 +1,14 @@
-<!-- index.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Web Tuner</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <div id="tuner">
-    <!-- Note Context -->
+    <!-- 1) Note Context -->
     <div class="note-context">
       <span id="prev2" class="note-small">--</span>
       <span id="prev1" class="note-small">--</span>
@@ -18,22 +17,25 @@
       <span id="next2" class="note-small">--</span>
     </div>
 
-    <!-- Gauge Container -->
+    <!-- 2) Gauge Container -->
     <div class="meter-container">
-      <canvas id="meterCanvas" width="1440" height="720"></canvas>
-      <canvas id="needleCanvas" width="1440" height="720"></canvas>
+      <!-- doubled height -->
+      <canvas id="meterCanvas" width="1440" height="1440"></canvas>
+      <canvas id="needleCanvas" width="1440" height="1440"></canvas>
     </div>
 
-    <!-- Waveform -->
+    <!-- 3) Waveform -->
     <div class="waveform-container">
       <canvas id="waveformCanvas" width="360" height="100"></canvas>
     </div>
 
-    <!-- Frequency Readout -->
+    <!-- 4) Frequency Readout -->
     <div id="freqDisplay" class="freq-display">-- Hz</div>
 
-    <!-- Preset Description -->
-    <div id="presetDesc" class="preset-desc">Guitar, 6-String Standard, Equal tempered</div>
+    <!-- 5) Preset Description -->
+    <div id="presetDesc" class="preset-desc">
+      Guitar, 6-String Standard, Equal tempered
+    </div>
   </div>
 
   <script src="tuner.js"></script>
