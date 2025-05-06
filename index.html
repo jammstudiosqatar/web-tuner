@@ -8,7 +8,7 @@
 </head>
 <body>
   <div id="tuner">
-    <!-- 1) Note Context Strip (five notes) -->
+    <!-- 1) Five-note context -->
     <div class="note-context">
       <span id="prev2" class="note-small">--</span>
       <span id="prev1" class="note-small">--</span>
@@ -17,7 +17,7 @@
       <span id="next2" class="note-small">--</span>
     </div>
 
-    <!-- 2) Gauge Area -->
+    <!-- 2) Gauge: ticks + needle (overlapped) -->
     <div class="meter-container">
       <canvas id="meterCanvas" width="1440" height="720"></canvas>
       <canvas id="needleCanvas" width="1440" height="720"></canvas>
@@ -28,10 +28,10 @@
       <canvas id="waveformCanvas" width="360" height="100"></canvas>
     </div>
 
-    <!-- 4) Frequency Readout -->
+    <!-- 4) Frequency -->
     <div id="freqDisplay" class="freq-display">-- Hz</div>
 
-    <!-- 5) Preset Description -->
+    <!-- 5) Preset description -->
     <div id="presetDesc" class="preset-desc">--</div>
   </div>
 
