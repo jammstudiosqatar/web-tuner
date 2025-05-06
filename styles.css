@@ -37,12 +37,11 @@ body {
   text-shadow: 0 0 8px rgba(0,255,0,0.8);
 }
 
-/* Gauge Container – reserve 90% of width as height
-   so your 360px-wide gauge gets ~324px of height */
+/* Gauge Container – reserve 80% of width as height */
 .meter-container {
   position: relative;
   width: 100%;
-  padding-top: 90%;    /* height = 90% of width */
+  padding-top: 80%;    /* height = 80% of width (e.g. 288px when width=360px) */
   margin-bottom: 16px;
 }
 .meter-container canvas {
