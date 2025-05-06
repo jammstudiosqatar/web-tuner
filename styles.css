@@ -37,13 +37,11 @@ body {
   text-shadow: 0 0 8px rgba(0,255,0,0.8);
 }
 
-/* Gauge Container – use padding‐top to reserve half‐height */
+/* Gauge Container: fixed 2:1 aspect */
 .meter-container {
   position: relative;
   width: 100%;
-  /* Increase padding-top to provide more vertical space for the gauge */
-  /* This was 50%, increased to 65% to prevent clipping */
-  padding-top: 65%; /* height = 65% of width -> approx 1.5:1 ratio */
+  aspect-ratio: 2 / 1;    /* width : height = 2 : 1 */
   margin-bottom: 16px;
 }
 .meter-container canvas {
