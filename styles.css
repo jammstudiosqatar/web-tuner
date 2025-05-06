@@ -37,18 +37,19 @@ body {
   text-shadow: 0 0 8px rgba(0,255,0,0.8);
 }
 
-/* Gauge Container: keep 2:1 aspect via padding-top trick */
+/* Gauge Container – no fixed height, keep 2:1 aspect automatically */
 .meter-container {
   position: relative;
   width: 100%;
-  padding-top: 50%;    /* height = 50% of width → 2:1 ratio */
   margin-bottom: 16px;
 }
 .meter-container canvas {
   position: absolute;
-  top: 0; left: 0;
+  top: 0;
+  left: 0;
   width: 100%;
-  height: 100%;
+  height: auto;    /* respect the canvas’s intrinsic 2:1 aspect */
+  display: block;
 }
 
 /* Waveform */
