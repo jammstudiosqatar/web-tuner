@@ -37,20 +37,31 @@ body {
   text-shadow: 0 0 8px rgba(0,255,0,0.8);
 }
 
-/* Gauge Container – reserve 80% of width as height */
+/* Gauge Container */
 .meter-container {
   position: relative;
   width: 100%;
-  padding-top: 80%;    /* height = 80% of width (e.g. 288px when width=360px) */
   margin-bottom: 16px;
 }
-.meter-container canvas {
+
+/* Meter canvas flows normally, defining container height */
+#meterCanvas {
+  position: relative;
+  width: 100%;
+  height: auto;
+  display: block;
+  z-index: 1;
+}
+
+/* Needle canvas sits on top, same size, no stretching */
+#needleCanvas {
   position: absolute;
   top: 0;
   left: 0;
   width: 100%;
-  height: 100%;
+  height: auto;
   display: block;
+  z-index: 2;
 }
 
 /* Waveform */
