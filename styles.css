@@ -37,11 +37,11 @@ body {
   text-shadow: 0 0 8px rgba(0,255,0,0.8);
 }
 
-/* Gauge Container: fixed 2:1 aspect */
+/* Gauge Container – make it square so the full 120° arc fits */
 .meter-container {
   position: relative;
   width: 100%;
-  aspect-ratio: 2 / 1;    /* width : height = 2 : 1 */
+  aspect-ratio: 1 / 1;   /* width:height = 1:1 (e.g. 360×360px) */
   margin-bottom: 16px;
 }
 .meter-container canvas {
