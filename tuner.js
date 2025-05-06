@@ -72,7 +72,7 @@
   const uiInterval  = 250;    // ms text throttle
   const noteStrings = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
   const exponent    = 0.3;    // compress extremes
-  const maxAngle    = Math.PI/6;  // 30°
+  const maxAngle    = Math.PI/3;  // 60°
 
   // initialize description
   presetDesc.textContent = 'Guitar, 6-String Standard, Equal tempered';
