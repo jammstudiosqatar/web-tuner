@@ -8,12 +8,7 @@
 </head>
 <body>
   <div id="tuner">
-    <!-- 1) String presets row -->
-    <div id="stringRow" class="string-row">
-      <!-- buttons injected by tuner.js -->
-    </div>
-
-    <!-- 2) Note context (prev2, prev1, current, next1, next2) -->
+    <!-- 1) Note Context Strip (five notes) -->
     <div class="note-context">
       <span id="prev2" class="note-small">--</span>
       <span id="prev1" class="note-small">--</span>
@@ -22,25 +17,24 @@
       <span id="next2" class="note-small">--</span>
     </div>
 
-     <div class="meter-container">
-     <!-- doubled resolution for a wider arc -->
-     <canvas id="meterCanvas" width="1440" height="720"></canvas>
-     <canvas id="needleCanvas" width="1440" height="720"></canvas>
+    <!-- 2) Gauge Area -->
+    <div class="meter-container">
+      <canvas id="meterCanvas" width="1440" height="720"></canvas>
+      <canvas id="needleCanvas" width="1440" height="720"></canvas>
     </div>
 
-    <!-- 4) Waveform -->
+    <!-- 3) Waveform -->
     <div class="waveform-container">
       <canvas id="waveformCanvas" width="360" height="100"></canvas>
     </div>
 
-    <!-- 5) Frequency readout -->
+    <!-- 4) Frequency Readout -->
     <div id="freqDisplay" class="freq-display">-- Hz</div>
 
-    <!-- 6) Preset description -->
+    <!-- 5) Preset Description -->
     <div id="presetDesc" class="preset-desc">--</div>
   </div>
 
-  <!-- load presets then tuner logic -->
   <script src="presets.js"></script>
   <script src="tuner.js"></script>
 </body>
