@@ -19,7 +19,7 @@ body {
   display: flex;
   justify-content: center;
   align-items: baseline;
-  margin-bottom: 24px; /* extra space so gauge isn’t clipped */
+  margin-bottom: 32px; /* extra space so the gauge never clips */
 }
 
 .note-small {
@@ -45,14 +45,16 @@ body {
 .meter-container {
   position: relative;
   width: 100%;
-  height: auto;
+  height: 180px;        /* fixed display height = 360px width * 0.5 */
   margin-bottom: 16px;
 }
 
-canvas {
+.meter-container canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 100%;
-  height: auto;
-  display: block;
+  height: 100%;
 }
 
 /* ===== Waveform ===== */
@@ -61,7 +63,10 @@ canvas {
 }
 
 .waveform-container canvas {
+  width: 100%;
+  height: auto;
   background: #111;
+  display: block;
 }
 
 /* ===== Frequency ===== */
