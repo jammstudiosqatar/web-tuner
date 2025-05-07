@@ -6,15 +6,15 @@ body {
   font-family: Arial, sans-serif;
   display: flex;
   justify-content: center;
-  padding: 10px;
+  align-items: flex-start;
+  padding: 20px 0;
 }
 
 #tuner {
-  width: 100%;
-  max-width: 360px;
+  width: 360px;
 }
 
-/* 1) Note strip */
+/* Note strip */
 .note-context {
   display: flex;
   justify-content: center;
@@ -23,38 +23,34 @@ body {
 }
 .note-small {
   font-size: 1em;
-  color: #666;
-  margin: 0 4px;
+  color: #555;
+  margin: 0 6px;
 }
 .note-large {
-  font-size: 3em;
-  color: #fff;
-  margin: 0 8px;
-  transition: text-shadow 0.2s ease-in-out;
-}
-.note-large.tuned {
-  color: #0f0;
-  text-shadow: 0 0 8px rgba(0,255,0,0.8);
+  font-size: 3.5em;
+  color: #f0f;
+  margin: 0 12px;
+  text-shadow:
+    0 0 8px rgba(255, 0, 255, 0.8),
+    0 0 16px rgba(255, 0, 255, 0.6);
 }
 
-/* 2) Gauge: square container + visible overflow */
+/* Gauge container */
 .meter-container {
   position: relative;
   width: 100%;
-  aspect-ratio: 1 / 1;    /* height = width (e.g. 360×360px) */
-  overflow: visible;      /* show ticks/labels that extend beyond */
+  aspect-ratio: 1 / 1;
   margin-bottom: 16px;
+  overflow: visible;
 }
 .meter-container canvas {
   position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
   display: block;
 }
 
-/* 3) Waveform */
+/* Waveform */
 .waveform-container {
   margin-bottom: 16px;
 }
@@ -65,16 +61,17 @@ body {
   display: block;
 }
 
-/* 4) Frequency readout */
+/* Frequency readout */
 .freq-display {
   text-align: center;
-  font-size: 2em;
+  font-size: 2.2em;
   margin-bottom: 8px;
+  text-shadow: 0 0 6px rgba(0,255,255,0.6);
 }
 
-/* 5) Preset description */
+/* Preset description */
 .preset-desc {
   text-align: center;
   font-size: 0.9em;
-  color: #777;
+  color: #666;
 }
